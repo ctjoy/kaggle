@@ -339,18 +339,26 @@ class FeatureProcesser(object):
         known_song_list = songs.song_id.apply(lambda x: x in known_song)
         logging.debug("establish known list in %0.2fs" % (time.time() - start))
 
-        Parallel(n_jobs=-1)(delayed(self._get_unknown_map)(i, members.msno, known_msno_list, True) for i in unknown_msno)
-        # n = 0
-        # for i in unknown_msno:
-        #     if i in msno_x:
-        #         df = self._get_rank(msno_m, msno_x[i], members.msno, known_msno_list)
-        #         unknown_msno_map[i] = df.iloc[0]['id']
-        #     else:
-        #         unknown_msno_map[i] = 'new'
-        #     n += 1
-        #     if (n + 1) % 100 == 0: print('msno: %f %%' % ((n/total_msno) * 100))
+        # start = time.time()
+        # Parallel(n_jobs=6)(delayed(self._get_unknown_map)(i, members.msno, known_msno_list, True) for i in unknown_msno)
+        # logging.debug("process msno in %0.2fs" % (time.time() - start))
+        n = 0
+        for i in unknown_msno:
+            if i in self.msno_x:
+                df = self._get_rank(self.msno_m, self.msno_x[i], members.msno, known_msno_list)
+                self.unknown_msno_map[i] = df.iloc[0]['id']
+            # else:
+            #     self.unknown_msno_map[i] = 'new'
+            n += 1
+            if (n + 1) % 100 == 0: print('msno: %f %%' % ((n/total_msno) * 100))
 
-        Parallel(n_jobs=-1)(delayed(self._get_unknown_map)(i, songs.song_id, known_song_list, False) for i in unknown_song)
+        # for i in unknown_song:
+        #     self.unknown_song_map[i] = 'new'
+        # start = time.time()
+        # r = Parallel(n_jobs=-1, verbose=100)(delayed(self._get_unknown_map)(i) for i in unknown_song)
+        # logging.debug("difficult part in %0.2fs" % (time.time() - start))
+        # for k, v in zip(unknown_song, r):
+        #     self.unknown_song_map[k] = v
         # n = 0
         # for i in unknown_song:
         #     if i in song_ix:
@@ -363,20 +371,21 @@ class FeatureProcesser(object):
 
         logging.debug("transform all unknown data in %0.2fs" % (time.time() - start))
 
-    def _get_unknown_map(self, i, map_list, known_list, msno=True):
-
-        if msno:
-            if i in self.msno_x:
-                df = self._get_rank(self.msno_m, self.msno_x[i], map_list, known_list)
-                self.unknown_msno_map[i] = df.iloc[0]['id']
-            else:
-                self.unknown_msno_map[i] = 'new'
-        else:
-            if i in self.song_x:
-                df = self._get_rank(self.song_m, self.song_x[i], map_list, known_list)
-                self.unknown_song_map[i] = df.iloc[0]['id']
-            else:
-                self.unknown_song_map[i] = 'new'
+    # def _get_unknown_map(self, i, map_list, known_list, msno=True):
+    # def _get_unknown_map(self, i):
+        # if msno:
+        #     if i in self.msno_x:
+        #         df = self._get_rank(self.msno_m, self.msno_x[i], map_list, known_list)
+        #         self.unknown_msno_map[i] = df.iloc[0]['id']
+        #     # else:
+        #     #     self.unknown_msno_map[i] = 'new'
+        # else:
+        # if i in self.song_x:
+        #     # df = self._get_rank(self.song_m, self.song_x[i], map_list, known_list)
+        #     df = self._get_rank(self.song_m, self.song_x[i], self.test_a, self.test_b)
+        #     return df.iloc[0]['id']
+            # else:
+            #     self.unknown_song_map[i] = 'new'
 
     def _get_rank(self, model, w, id_list, known_list):
         result = cosine_similarity(model, model[w].toarray().reshape(1, -1)).reshape(1, -1)[0]
@@ -476,21 +485,21 @@ class ImplicitProcesser(object):
 
         logging.debug("preprocess train data in %0.2fs" % (time.time() - start))
 
-    def _get_ix(self, msno=True):
+    def _get_ix(self, x, msno=True):
         if msno:
             if x in self.msno_ix.keys():
                 return self.msno_ix[x]
             elif x in self.unknown_msno_map:
                 return self.msno_ix[self.unknown_msno_map[x]]
             else:
-                return np.fill(25, np.nan)
+                return 'new'
         else:
             if x in self.song_ix.keys():
                 return self.song_ix[x]
             elif x in self.unknown_song_map:
                 return self.song_ix[self.unknown_song_map[x]]
             else:
-                return np.fill(25, np.nan)
+                return 'new'
 
     def _process_test(self):
 
