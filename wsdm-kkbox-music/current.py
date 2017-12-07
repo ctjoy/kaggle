@@ -16,9 +16,9 @@ params = [{
         'objective': 'binary',
         'metric': 'binary_logloss',
         'boosting': 'gbdt',
-        'learning_rate': 0.2 ,
+        'learning_rate': 0.3 ,
         'verbose': 0,
-        'num_leaves': 2 ** 8,
+        'num_leaves': 2 ** 10,
         'bagging_fraction': 0.95,
         'bagging_freq': 1,
         'bagging_seed': 1,
@@ -26,7 +26,7 @@ params = [{
         'feature_fraction_seed': 1,
         'max_bin': 256,
         'max_depth': 30,
-        'num_rounds': 200,
+        'num_rounds': 300,
         'metric' : 'auc'
     },{
         'objective': 'binary',
@@ -34,7 +34,7 @@ params = [{
         'boosting': 'dart',
         'learning_rate': 0.3 ,
         'verbose': 0,
-        'num_leaves': 2 ** 8,
+        'num_leaves': 2 ** 10,
         'bagging_fraction': 0.95,
         'bagging_freq': 1,
         'bagging_seed': 1,
@@ -42,7 +42,7 @@ params = [{
         'feature_fraction_seed': 1,
         'max_bin': 256,
         'max_depth': 20,
-        'num_rounds': 200,
+        'num_rounds': 300,
         'metric' : 'auc'
     }]
 
