@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from implicit.als import AlternatingLeastSquares
 from joblib import Parallel, delayed
+from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import pickle
@@ -388,32 +389,45 @@ class FeatureProcesser(object):
         logging.debug("establish known list in %0.2fs" % (time.time() - start))
 
         start = time.time()
+        self.id_list = members.msno
+        self.known_list = known_msno_list
         n = 0
         for i in unknown_msno:
             if i in self.msno_x:
-                df = self._get_rank(self.msno_m, self.msno_x[i], members.msno, known_msno_list)
+                df = self._get_rank(self.msno_m, self.msno_x[i])
                 # self.unknown_msno_map[i] = df.iloc[0]['id']
-                self.unknown_msno_map[i] = list(df[df.similarity == df.iloc[0]['similarity']]['id'])
+                most_similar = list(df[df.similarity == df.iloc[0]['similarity']]['id'])
+                self.unknown_msno_map[i] = most_similar
             n += 1
             if (n + 1) % 100 == 0: print('msno: %f %%' % ((n/total_msno) * 100))
         logging.debug("process msno unknown in %0.2fs" % (time.time() - start))
 
-        # start = time.time()
-        # n = 0
-        # for i in unknown_song:
-        #     if i in self.song_x:
-        #         df = self._get_rank(self.song_m, self.song_x[i], songs.song_id, known_song_list)
-        #         self.unknown_song_map[i] = df.iloc[0]['id']
-        #         self.unknown_song_map[i] = list(df[df.similarity == df.iloc[0]['similarity']]['id'])
-        #     n += 1
-        #     if (n + 1) % 100 == 0: print('song: %f %%' % ((n/total_song) * 100))
-        # logging.debug("process song unknown in %0.2fs" % (time.time() - start))
+        start = time.time()
+        self.id_list = songs.song_id
+        self.known_list = known_song_list
+        # p = Pool(processes=6)
+        # p.map(self._map_unknown_song, unknown_song)
+        n = 0
+        for i in unknown_song:
+            if i in self.song_x:
+                df = self._get_rank(self.song_m, self.song_x[i])
+                # self.unknown_song_map[i] = df.iloc[0]['id']
+                most_similar = list(df[df.similarity == df.iloc[0]['similarity']]['id'])
+                self.unknown_song_map[i] = most_similar[0]
+            n += 1
+            if (n + 1) % 100 == 0: print('song: %f %%' % ((n/total_song) * 100))
+        logging.debug("process song unknown in %0.2fs" % (time.time() - start))
 
         logging.debug("transform all unknown data in %0.2fs" % (time.time() - start))
 
-    def _get_rank(self, model, w, id_list, known_list):
+    # def _map_unknown_song(self, i):
+    #     if i in self.song_x:
+    #         df = self._get_rank(self.song_m, self.song_x[i])
+    #         self.unknown_song_map[i] = df.iloc[0]['id']
+
+    def _get_rank(self, model, w):
         result = cosine_similarity(model, model[w].toarray().reshape(1, -1)).reshape(1, -1)[0]
-        r = pd.DataFrame({'id': id_list, 'similarity': result, 'known': known_list})
+        r = pd.DataFrame({'id': self.id_list, 'similarity': result, 'known': self.known_list})
         return r[r.known].sort_values(by='similarity', ascending=False).reset_index(drop=True)
 
     def _transform_isrc_to_country(self, isrc):
@@ -661,25 +675,33 @@ class ImplicitProcesser(object):
 
         logging.debug("preprocess train data in %0.2fs" % (time.time() - start))
 
-    def _get_ix(self, x, msno=True):
-        if msno:
+    def _get_ix(self, x, is_msno=True):
+        if is_msno:
             if x in self.msno_ix:
                 return self.msno_ix[x]
             elif x in self.unknown_msno_map:
-                if len(self.unknown_msno_map[x]) == 1:
-                    return self.msno_ix[self.unknown_msno_map[x]]
+                most_similar = self.unknown_msno_map[x]
+                if len(most_similar) == 1:
+                    if most_similar[0] in self.msno_ix:
+                        return self.msno_ix[most_similar[0]]
+                    else:
+                        return 'new'
                 else:
-                    return [self.msno_ix[i] for i in self.unknown_msno_map[x] if i in self.msno_ix]
+                    return '|'.join([str(self.msno_ix[i]) for i in most_similar if i in self.msno_ix])
             else:
                 return 'new'
         else:
             if x in self.song_ix:
                 return self.song_ix[x]
             elif x in self.unknown_song_map:
-                if len(self.unknown_song_map[x]) == 1:
-                    return self.song_ix[self.unknown_song_map[x]]
+                most_similar = self.unknown_song_map[x]
+                if len(most_similar) == 1:
+                    if most_similar[0] in self.song_ix:
+                        return self.song_ix[most_similar[0]]
+                    else:
+                        return 'new'
                 else:
-                    return [self.song_ix[i] for i in self.unknown_song_map[x] if i in self.song_ix]
+                    return '|'.join([str(self.song_ix[i]) for i in most_similar if i in self.song_ix])
             else:
                 return 'new'
 
@@ -714,18 +736,20 @@ class ImplicitProcesser(object):
         return [(i, result[i]) for i in result.argsort()[::-1][:top_n + 1]]
 
     def _get_factors_for_testset(self, i, is_item=True):
-        if i == 'new':
-            return np.full(self.factors, np.nan)
-        elif !isinstance(i, list):
+        if isinstance(i, str):
+            if i == 'new':
+                return np.full(self.factors, np.nan)
+            else:
+                l = [int(x) for x in i.split('|') if x != '']
+                if is_item:
+                    return np.mean(self.item_factors[l, :], axis=0)
+                else:
+                    return np.mean(self.user_factors[l, :], axis=0)
+        else:
             if is_item:
                 return self.item_factors[i]
             else:
                 return self.user_factors[i]
-        else:
-            if is_item:
-                return np.mean(self.item_factors[i, :], axis=0)
-            else:
-                return np.mean(self.user_factors[i, :], axis=0)
 
     def _get_factors(self, is_train=True):
 
